@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Countdown Widget</string>
+    <string name="widget_sample_chip">Aurora</string>
+    <string name="widget_sample_title">Dream date</string>
+    <string name="widget_sample_days_value">32</string>
+    <string name="widget_sample_days_label">days left</string>
+    <string name="widget_sample_target_date">2026-05-20</string>
 </resources>

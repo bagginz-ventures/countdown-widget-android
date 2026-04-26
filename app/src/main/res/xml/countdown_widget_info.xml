@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:minWidth="180dp"
-    android:minHeight="120dp"
-    android:initialLayout="@layout/app_widget_countdown"
-    android:previewLayout="@layout/app_widget_countdown"
+    android:minWidth="72dp"
+    android:minHeight="72dp"
+    android:initialLayout="@layout/app_widget_compact"
+    android:previewLayout="@layout/app_widget_compact"
     android:resizeMode="horizontal|vertical"
-    android:targetCellWidth="3"
-    android:targetCellHeight="2"
+    android:targetCellWidth="1"
+    android:targetCellHeight="1"
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen" />
