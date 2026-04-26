@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widgetRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <View
+        android:id="@+id/widgetAccentBar"
+        android:layout_width="36dp"
+        android:layout_height="4dp"
+        android:background="#76E4F7" />
+
+    <TextView
+        android:id="@+id/widgetChip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:text="Aurora"
+        android:textColor="#76E4F7"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/widgetTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:text="Dream date"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/widgetDaysValue"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="sans-serif-black"
+        android:text="32"
+        android:textColor="#FFFFFF"
+        android:textSize="56sp" />
+
+    <TextView
+        android:id="@+id/widgetDaysLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="days left"
+        android:textColor="#CAD5E2"
+        android:textSize="16sp" />
+
+    <TextView
+        android:id="@+id/widgetTargetDate"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="2026-05-20"
+        android:textColor="#93A4B8"
+        android:textSize="13sp" />
+
+</LinearLayout>
