@@ -7,11 +7,12 @@
     android:orientation="vertical"
     android:padding="20dp">
 
-    <View
+    <TextView
         android:id="@+id/widgetAccentBar"
         android:layout_width="36dp"
         android:layout_height="4dp"
-        android:background="#76E4F7" />
+        android:background="#76E4F7"
+        android:text="" />
 
     <TextView
         android:id="@+id/widgetChip"
