@@ -22,18 +22,20 @@ object WidgetUpdateScheduler {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val nextMidnight = LocalDateTime.now()
-            .toLocalDate()
-            .plusDays(1)
-            .atStartOfDay(ZoneId.systemDefault())
+        val nextHour = LocalDateTime.now()
+            .plusHours(1)
+            .withMinute(0)
+            .withSecond(0)
+            .withNano(0)
+            .atZone(ZoneId.systemDefault())
             .toInstant()
             .toEpochMilli()
 
         alarmManager.cancel(pendingIntent)
         alarmManager.setInexactRepeating(
             AlarmManager.RTC,
-            nextMidnight,
-            AlarmManager.INTERVAL_DAY,
+            nextHour,
+            AlarmManager.INTERVAL_HOUR,
             pendingIntent
         )
     }

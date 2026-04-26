@@ -8,15 +8,20 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.view.View
 import android.widget.RemoteViews
 import com.bagginzventures.countdownwidget.MainActivity
 import com.bagginzventures.countdownwidget.R
 import com.bagginzventures.countdownwidget.data.CountdownCalculator
+import com.bagginzventures.countdownwidget.data.CountdownPresentation
 import com.bagginzventures.countdownwidget.data.CountdownRepository
+import com.bagginzventures.countdownwidget.data.PhotoStorage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.ZoneOffset
 
 const val ACTION_REFRESH_WIDGET = "com.bagginzventures.countdownwidget.action.REFRESH_WIDGET"
 
@@ -85,6 +90,9 @@ class CountdownAppWidgetProvider : AppWidgetProvider() {
                 val repository = CountdownRepository(context)
                 val config = repository.config.first()
                 val presentation = CountdownCalculator.presentation(config)
+                val photoStorage = PhotoStorage(context)
+                val activePhotoPath = resolveActivePhotoPath(config.backgroundPhotoPaths, config.rotationHours)
+                val backgroundBitmap = activePhotoPath?.let { photoStorage.loadBitmap(it) }
                 val openAppIntent = PendingIntent.getActivity(
                     context,
                     991,
@@ -105,14 +113,21 @@ class CountdownAppWidgetProvider : AppWidgetProvider() {
                         setTextColor(R.id.widgetDaysValue, Color.WHITE)
                         setOnClickPendingIntent(R.id.widgetRoot, openAppIntent)
 
+                        if (backgroundBitmap != null) {
+                            setViewVisibility(R.id.widgetBackgroundImage, View.VISIBLE)
+                            setImageViewBitmap(R.id.widgetBackgroundImage, backgroundBitmap)
+                            setInt(R.id.widgetOverlay, "setBackgroundColor", 0x66000000)
+                        } else {
+                            setViewVisibility(R.id.widgetBackgroundImage, View.GONE)
+                            setInt(R.id.widgetOverlay, "setBackgroundColor", Color.TRANSPARENT)
+                        }
+
                         when (layoutMode) {
-                            WidgetLayoutMode.SMALL -> {
-                                // number only
-                            }
+                            WidgetLayoutMode.SMALL -> Unit
                             WidgetLayoutMode.COMPACT -> {
                                 setTextViewText(R.id.widgetTitle, config.title)
-                                setTextViewText(R.id.widgetDaysLabel, presentation.statusLabel)
-                                setTextColor(R.id.widgetTitle, 0xFF93A4B8.toInt())
+                                setTextViewText(R.id.widgetDaysLabel, compactLabel(presentation))
+                                setTextColor(R.id.widgetTitle, 0xFFE7ECF5.toInt())
                                 setTextColor(R.id.widgetDaysLabel, 0xFFCAD5E2.toInt())
                             }
                             WidgetLayoutMode.FULL -> {
@@ -139,9 +154,25 @@ class CountdownAppWidgetProvider : AppWidgetProvider() {
 
             return when {
                 minWidth <= 110 && minHeight <= 110 -> WidgetLayoutMode.SMALL
-                minWidth <= 160 || minHeight <= 110 -> WidgetLayoutMode.COMPACT
+                minWidth <= 180 || minHeight <= 110 -> WidgetLayoutMode.COMPACT
                 else -> WidgetLayoutMode.FULL
             }
+        }
+
+        private fun compactLabel(presentation: CountdownPresentation): String = when (presentation.statusLabel) {
+            "days left" -> "days"
+            "days since" -> "since"
+            "happening today" -> "today"
+            else -> presentation.statusLabel
+        }
+
+        private fun resolveActivePhotoPath(photoPaths: List<String>, rotationHours: Int): String? {
+            if (photoPaths.isEmpty()) return null
+            if (photoPaths.size == 1) return photoPaths.first()
+            val rotationWindow = rotationHours.coerceIn(1, 168)
+            val epochHours = Instant.now().atZone(ZoneOffset.UTC).toEpochSecond() / 3600
+            val index = ((epochHours / rotationWindow) % photoPaths.size).toInt()
+            return photoPaths.getOrNull(index)
         }
     }
 }

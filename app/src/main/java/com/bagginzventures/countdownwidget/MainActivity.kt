@@ -1,9 +1,13 @@
 package com.bagginzventures.countdownwidget
 
 import android.content.Context
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +26,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Collections
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -30,6 +36,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -52,12 +59,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bagginzventures.countdownwidget.data.AccentTheme
 import com.bagginzventures.countdownwidget.data.CountdownCalculator
 import com.bagginzventures.countdownwidget.data.CountdownConfig
 import com.bagginzventures.countdownwidget.data.CountdownRepository
+import com.bagginzventures.countdownwidget.data.DEFAULT_TITLE
+import com.bagginzventures.countdownwidget.data.PhotoStorage
 import com.bagginzventures.countdownwidget.ui.theme.CountdownWidgetTheme
 import com.bagginzventures.countdownwidget.widget.CountdownAppWidgetProvider
 import kotlinx.coroutines.launch
@@ -90,33 +100,75 @@ private fun CountdownApp(
 ) {
     val config by repository.config.collectAsState(initial = CountdownConfig())
     val scope = rememberCoroutineScope()
+    val photoStorage = remember(appContext) { PhotoStorage(appContext) }
 
     var title by remember { mutableStateOf(config.title) }
     var targetDate by remember { mutableStateOf(config.targetDate) }
     var accentTheme by remember { mutableStateOf(config.accentTheme) }
+    var backgroundPhotoPaths by remember { mutableStateOf(config.backgroundPhotoPaths) }
+    var rotationHoursText by remember { mutableStateOf(config.rotationHours.toString()) }
+    var photoStatus by remember { mutableStateOf<String?>(null) }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 20)
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            scope.launch {
+                val cached = photoStorage.replacePhotos(uris, backgroundPhotoPaths)
+                backgroundPhotoPaths = cached
+                photoStatus = "${cached.size} background photo${if (cached.size == 1) "" else "s"} selected"
+            }
+        }
+    }
 
     LaunchedEffect(config) {
         title = config.title
         targetDate = config.targetDate
         accentTheme = config.accentTheme
+        backgroundPhotoPaths = config.backgroundPhotoPaths
+        rotationHoursText = config.rotationHours.toString()
     }
 
     CountdownScreen(
         title = title,
         targetDate = targetDate,
         accentTheme = accentTheme,
+        backgroundPhotoCount = backgroundPhotoPaths.size,
+        rotationHoursText = rotationHoursText,
+        photoStatus = photoStatus,
         onTitleChanged = { title = it },
         onTargetDateChanged = { targetDate = it },
         onAccentThemeChanged = { accentTheme = it },
+        onRotationHoursChanged = {
+            rotationHoursText = it.filter { char -> char.isDigit() }.take(3)
+        },
+        onPickPhotos = {
+            photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        },
+        onClearPhotos = {
+            scope.launch {
+                photoStorage.clearPhotos(backgroundPhotoPaths)
+                backgroundPhotoPaths = emptyList()
+                photoStatus = "Background photos cleared"
+            }
+        },
         onSave = {
             scope.launch {
+                val rotationHours = rotationHoursText.toIntOrNull()?.coerceIn(1, 168) ?: 24
                 repository.save(
                     CountdownConfig(
-                        title = title,
+                        title = title.ifBlank { DEFAULT_TITLE },
                         targetDate = targetDate,
-                        accentTheme = accentTheme
+                        accentTheme = accentTheme,
+                        backgroundPhotoPaths = backgroundPhotoPaths,
+                        rotationHours = rotationHours
                     )
                 )
+                photoStatus = if (backgroundPhotoPaths.isEmpty()) {
+                    "Countdown saved"
+                } else {
+                    "Countdown saved with ${backgroundPhotoPaths.size} photo${if (backgroundPhotoPaths.size == 1) "" else "s"}"
+                }
                 CountdownAppWidgetProvider.updateAllWidgets(appContext)
             }
         }
@@ -129,17 +181,26 @@ private fun CountdownScreen(
     title: String,
     targetDate: LocalDate,
     accentTheme: AccentTheme,
+    backgroundPhotoCount: Int,
+    rotationHoursText: String,
+    photoStatus: String?,
     onTitleChanged: (String) -> Unit,
     onTargetDateChanged: (LocalDate) -> Unit,
     onAccentThemeChanged: (AccentTheme) -> Unit,
+    onRotationHoursChanged: (String) -> Unit,
+    onPickPhotos: () -> Unit,
+    onClearPhotos: () -> Unit,
     onSave: () -> Unit
 ) {
-    val presentation = remember(title, targetDate, accentTheme) {
+    val rotationHours = rotationHoursText.toIntOrNull()?.coerceIn(1, 168) ?: 24
+    val presentation = remember(title, targetDate, accentTheme, backgroundPhotoCount, rotationHours) {
         CountdownCalculator.presentation(
             CountdownConfig(
                 title = title,
                 targetDate = targetDate,
-                accentTheme = accentTheme
+                accentTheme = accentTheme,
+                backgroundPhotoPaths = List(backgroundPhotoCount) { "preview" },
+                rotationHours = rotationHours
             )
         )
     }
@@ -238,6 +299,13 @@ private fun CountdownScreen(
                         color = Color(0xFF91A4BB),
                         style = MaterialTheme.typography.bodyMedium
                     )
+                    if (backgroundPhotoCount > 0) {
+                        Text(
+                            text = "$backgroundPhotoCount background photo${if (backgroundPhotoCount == 1) "" else "s"} • rotate every $rotationHours hour${if (rotationHours == 1) "" else "s"}",
+                            color = Color(0xFFDDE7F4),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
                 }
             }
 
@@ -267,7 +335,7 @@ private fun CountdownScreen(
                         onClick = { showDatePicker = true },
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
                     ) {
-                        androidx.compose.material3.Icon(
+                        Icon(
                             imageVector = Icons.Rounded.CalendarMonth,
                             contentDescription = null
                         )
@@ -297,14 +365,70 @@ private fun CountdownScreen(
                             }
                         }
                     }
-                    Button(
-                        onClick = onSave,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Save & refresh widget")
-                    }
                 }
             }
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF121927)),
+                shape = RoundedCornerShape(24.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Text(
+                        text = "Background photos",
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Pick photos from your device or provider-backed pickers like Google Photos. The app caches copies locally for reliable widget rendering.",
+                        color = Color(0xFFCAD5E2),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(onClick = onPickPhotos) {
+                            Icon(Icons.Rounded.Collections, contentDescription = null)
+                            Spacer(modifier = Modifier.size(8.dp))
+                            Text("Choose photos")
+                        }
+                        if (backgroundPhotoCount > 0) {
+                            OutlinedButton(onClick = onClearPhotos) {
+                                Icon(Icons.Rounded.Delete, contentDescription = null)
+                                Spacer(modifier = Modifier.size(8.dp))
+                                Text("Clear")
+                            }
+                        }
+                    }
+                    OutlinedTextField(
+                        value = rotationHoursText,
+                        onValueChange = onRotationHoursChanged,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Rotate every X hours") },
+                        supportingText = { Text("Use 1–168 hours. If only one photo is chosen, rotation is ignored.") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true
+                    )
+                    Text(
+                        text = when {
+                            photoStatus != null -> photoStatus
+                            backgroundPhotoCount > 0 -> "$backgroundPhotoCount photos ready"
+                            else -> "No background photos selected"
+                        },
+                        color = Color(0xFF93A4B8),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
+            Button(
+                onClick = onSave,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Save & refresh widget")
+            }
+
             Text(
                 text = "Add the widget from your launcher to pin this countdown to your home screen.",
                 color = Color(0xFF72839B),

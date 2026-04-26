@@ -1,72 +1,85 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widgetRoot"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@drawable/widget_background"
-    android:gravity="center"
-    android:orientation="vertical"
-    android:padding="18dp">
+    android:layout_height="match_parent">
 
-    <TextView
-        android:id="@+id/widgetAccentBar"
-        android:layout_width="36dp"
-        android:layout_height="4dp"
-        android:background="#76E4F7"
-        android:text="" />
+    <ImageView
+        android:id="@+id/widgetBackgroundImage"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:adjustViewBounds="false"
+        android:contentDescription="@null"
+        android:scaleType="centerCrop"
+        android:src="@android:color/transparent" />
 
-    <TextView
-        android:id="@+id/widgetChip"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+    <LinearLayout
+        android:id="@+id/widgetOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:gravity="center"
-        android:text="@string/widget_sample_chip"
-        android:textColor="#76E4F7"
-        android:textSize="12sp"
-        android:textStyle="bold" />
+        android:orientation="vertical"
+        android:padding="18dp">
 
-    <TextView
-        android:id="@+id/widgetTitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:ellipsize="end"
-        android:gravity="center"
-        android:maxLines="1"
-        android:text="@string/widget_sample_title"
-        android:textColor="#FFFFFF"
-        android:textSize="18sp"
-        android:textStyle="bold" />
+        <TextView
+            android:id="@+id/widgetAccentBar"
+            android:layout_width="36dp"
+            android:layout_height="4dp"
+            android:background="#76E4F7"
+            android:text="" />
 
-    <TextView
-        android:id="@+id/widgetDaysValue"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:fontFamily="sans-serif-black"
-        android:gravity="center"
-        android:text="@string/widget_sample_days_value"
-        android:textColor="#FFFFFF"
-        android:textSize="56sp" />
+        <TextView
+            android:id="@+id/widgetChip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center"
+            android:text="@string/widget_sample_chip"
+            android:textColor="#76E4F7"
+            android:textSize="12sp"
+            android:textStyle="bold" />
 
-    <TextView
-        android:id="@+id/widgetDaysLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:gravity="center"
-        android:text="@string/widget_sample_days_label"
-        android:textColor="#CAD5E2"
-        android:textSize="16sp" />
+        <TextView
+            android:id="@+id/widgetTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:text="@string/widget_sample_title"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold" />
 
-    <TextView
-        android:id="@+id/widgetTargetDate"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:gravity="center"
-        android:text="@string/widget_sample_target_date"
-        android:textColor="#93A4B8"
-        android:textSize="13sp" />
+        <TextView
+            android:id="@+id/widgetDaysValue"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:fontFamily="sans-serif-black"
+            android:gravity="center"
+            android:text="@string/widget_sample_days_value"
+            android:textColor="#FFFFFF"
+            android:textSize="56sp" />
 
-</LinearLayout>
+        <TextView
+            android:id="@+id/widgetDaysLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="@string/widget_sample_days_label"
+            android:textColor="#CAD5E2"
+            android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/widgetTargetDate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:text="@string/widget_sample_target_date"
+            android:textColor="#93A4B8"
+            android:textSize="13sp" />
+    </LinearLayout>
+</FrameLayout>
