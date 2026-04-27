@@ -10,9 +10,12 @@ import android.graphics.Color
 import android.os.Bundle
 import android.view.View
 import android.widget.RemoteViews
+import com.bagginzventures.countdownwidget.DESTINATION_DETAIL
+import com.bagginzventures.countdownwidget.EXTRA_DESTINATION
 import com.bagginzventures.countdownwidget.MainActivity
 import com.bagginzventures.countdownwidget.R
 import com.bagginzventures.countdownwidget.data.CountdownCalculator
+import com.bagginzventures.countdownwidget.data.CountdownConfig
 import com.bagginzventures.countdownwidget.data.CountdownPresentation
 import com.bagginzventures.countdownwidget.data.CountdownRepository
 import com.bagginzventures.countdownwidget.data.PhotoStorage
@@ -93,10 +96,13 @@ class CountdownAppWidgetProvider : AppWidgetProvider() {
                 val photoStorage = PhotoStorage(context)
                 val activePhotoPath = resolveActivePhotoPath(config.backgroundPhotoPaths, config.rotationHours)
                 val backgroundBitmap = activePhotoPath?.let { photoStorage.loadBitmap(it) }
-                val openAppIntent = PendingIntent.getActivity(
+                val detailIntent = PendingIntent.getActivity(
                     context,
                     991,
-                    Intent(context, MainActivity::class.java),
+                    Intent(context, MainActivity::class.java).apply {
+                        putExtra(EXTRA_DESTINATION, DESTINATION_DETAIL)
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    },
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
 
@@ -111,7 +117,7 @@ class CountdownAppWidgetProvider : AppWidgetProvider() {
                         setInt(R.id.widgetRoot, "setBackgroundResource", R.drawable.widget_background)
                         setTextViewText(R.id.widgetDaysValue, presentation.daysValue)
                         setTextColor(R.id.widgetDaysValue, Color.WHITE)
-                        setOnClickPendingIntent(R.id.widgetRoot, openAppIntent)
+                        setOnClickPendingIntent(R.id.widgetRoot, detailIntent)
 
                         if (backgroundBitmap != null) {
                             setViewVisibility(R.id.widgetBackgroundImage, View.VISIBLE)
@@ -124,27 +130,48 @@ class CountdownAppWidgetProvider : AppWidgetProvider() {
 
                         when (layoutMode) {
                             WidgetLayoutMode.SMALL -> Unit
-                            WidgetLayoutMode.COMPACT -> {
-                                setTextViewText(R.id.widgetTitle, config.title)
-                                setTextViewText(R.id.widgetDaysLabel, compactLabel(presentation))
-                                setTextColor(R.id.widgetTitle, 0xFFE7ECF5.toInt())
-                                setTextColor(R.id.widgetDaysLabel, 0xFFCAD5E2.toInt())
-                            }
-                            WidgetLayoutMode.FULL -> {
-                                setInt(R.id.widgetAccentBar, "setBackgroundColor", config.accentTheme.accentColor.toInt())
-                                setTextColor(R.id.widgetChip, config.accentTheme.accentColor.toInt())
-                                setTextViewText(R.id.widgetChip, config.accentTheme.displayName)
-                                setTextViewText(R.id.widgetTitle, config.title)
-                                setTextViewText(R.id.widgetDaysLabel, presentation.statusLabel)
-                                setTextViewText(R.id.widgetTargetDate, presentation.detailLabel)
-                                setTextColor(R.id.widgetTitle, Color.WHITE)
-                                setTextColor(R.id.widgetDaysLabel, 0xFFCAD5E2.toInt())
-                                setTextColor(R.id.widgetTargetDate, 0xFF93A4B8.toInt())
-                            }
+                            WidgetLayoutMode.COMPACT -> bindCompact(this, config, presentation)
+                            WidgetLayoutMode.FULL -> bindFull(this, config, presentation)
                         }
                     }
                     appWidgetManager.updateAppWidget(widgetId, views)
                 }
+            }
+        }
+
+        private fun bindCompact(views: RemoteViews, config: CountdownConfig, presentation: CountdownPresentation) {
+            views.setTextViewText(R.id.widgetTitle, config.title)
+            views.setTextViewText(R.id.widgetDaysLabel, compactLabel(presentation))
+            views.setTextViewText(R.id.widgetTargetDate, presentation.detailLabelDateTime)
+            views.setTextColor(R.id.widgetTitle, 0xFFE7ECF5.toInt())
+            views.setTextColor(R.id.widgetDaysLabel, 0xFFCAD5E2.toInt())
+            views.setTextColor(R.id.widgetTargetDate, 0xFF93A4B8.toInt())
+        }
+
+        private fun bindFull(views: RemoteViews, config: CountdownConfig, presentation: CountdownPresentation) {
+            views.setInt(R.id.widgetAccentBar, "setBackgroundColor", config.accentTheme.accentColor.toInt())
+            views.setTextViewText(R.id.widgetTitle, config.title)
+            views.setTextViewText(R.id.widgetDaysLabel, presentation.statusLabel)
+            views.setTextViewText(R.id.widgetTargetDate, presentation.detailLabelDateTime)
+            views.setTextColor(R.id.widgetTitle, Color.WHITE)
+            views.setTextColor(R.id.widgetDaysLabel, 0xFFCAD5E2.toInt())
+            views.setTextColor(R.id.widgetTargetDate, 0xFF93A4B8.toInt())
+
+            if (config.description.isNotBlank()) {
+                views.setViewVisibility(R.id.widgetDescription, View.VISIBLE)
+                views.setTextViewText(R.id.widgetDescription, config.description)
+            } else {
+                views.setViewVisibility(R.id.widgetDescription, View.GONE)
+            }
+
+            if (config.extraFieldEnabled && config.extraFieldValue.isNotBlank()) {
+                views.setViewVisibility(R.id.widgetExtraField, View.VISIBLE)
+                views.setTextViewText(
+                    R.id.widgetExtraField,
+                    "${config.extraFieldLabel.ifBlank { "Detail" }}: ${config.extraFieldValue}"
+                )
+            } else {
+                views.setViewVisibility(R.id.widgetExtraField, View.GONE)
             }
         }
 

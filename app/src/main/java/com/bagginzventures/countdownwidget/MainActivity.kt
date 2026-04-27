@@ -1,5 +1,6 @@
 package com.bagginzventures.countdownwidget
 
+import android.app.TimePickerDialog
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Collections
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -45,6 +47,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
@@ -58,6 +61,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -75,20 +79,27 @@ import com.bagginzventures.countdownwidget.ui.theme.CountdownWidgetTheme
 import com.bagginzventures.countdownwidget.widget.CountdownAppWidgetProvider
 import kotlinx.coroutines.launch
 import java.time.Instant
-import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+
+const val EXTRA_DESTINATION = "destination"
+const val DESTINATION_DETAIL = "detail"
+const val DESTINATION_EDIT = "edit"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val repository = CountdownRepository(applicationContext)
+        val startDestination = intent?.getStringExtra(EXTRA_DESTINATION) ?: DESTINATION_EDIT
         setContent {
             CountdownWidgetTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     CountdownApp(
                         repository = repository,
-                        appContext = applicationContext
+                        appContext = applicationContext,
+                        startDestination = startDestination
                     )
                 }
             }
@@ -99,15 +110,21 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun CountdownApp(
     repository: CountdownRepository,
-    appContext: Context
+    appContext: Context,
+    startDestination: String
 ) {
     val config by repository.config.collectAsState(initial = CountdownConfig())
     val scope = rememberCoroutineScope()
     val photoStorage = remember(appContext) { PhotoStorage(appContext) }
 
+    var currentScreen by remember { mutableStateOf(startDestination) }
     var title by remember { mutableStateOf(config.title) }
-    var targetDate by remember { mutableStateOf(config.targetDate) }
+    var targetDateTime by remember { mutableStateOf(config.targetDateTime) }
     var accentTheme by remember { mutableStateOf(config.accentTheme) }
+    var description by remember { mutableStateOf(config.description) }
+    var extraFieldEnabled by remember { mutableStateOf(config.extraFieldEnabled) }
+    var extraFieldLabel by remember { mutableStateOf(config.extraFieldLabel) }
+    var extraFieldValue by remember { mutableStateOf(config.extraFieldValue) }
     var backgroundPhotoPaths by remember { mutableStateOf(config.backgroundPhotoPaths) }
     var rotationHoursText by remember { mutableStateOf(config.rotationHours.toString()) }
     var photoStatus by remember { mutableStateOf<String?>(null) }
@@ -117,8 +134,12 @@ private fun CountdownApp(
         repository.save(
             CountdownConfig(
                 title = title.ifBlank { DEFAULT_TITLE },
-                targetDate = targetDate,
+                targetDateTime = targetDateTime,
                 accentTheme = accentTheme,
+                description = description,
+                extraFieldEnabled = extraFieldEnabled,
+                extraFieldLabel = extraFieldLabel,
+                extraFieldValue = extraFieldValue,
                 backgroundPhotoPaths = updatedPhotoPaths,
                 rotationHours = rotationHours
             )
@@ -141,9 +162,7 @@ private fun CountdownApp(
         contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 20)
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
-            scope.launch {
-                cacheAndApplyPhotos(uris, "Photos")
-            }
+            scope.launch { cacheAndApplyPhotos(uris, "Photos") }
         }
     }
 
@@ -151,71 +170,113 @@ private fun CountdownApp(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
-            scope.launch {
-                cacheAndApplyPhotos(uris, "Files")
-            }
+            scope.launch { cacheAndApplyPhotos(uris, "Files") }
         }
     }
 
     LaunchedEffect(config) {
         title = config.title
-        targetDate = config.targetDate
+        targetDateTime = config.targetDateTime
         accentTheme = config.accentTheme
+        description = config.description
+        extraFieldEnabled = config.extraFieldEnabled
+        extraFieldLabel = config.extraFieldLabel
+        extraFieldValue = config.extraFieldValue
         backgroundPhotoPaths = config.backgroundPhotoPaths
         rotationHoursText = config.rotationHours.toString()
     }
 
-    CountdownScreen(
-        title = title,
-        targetDate = targetDate,
-        accentTheme = accentTheme,
-        backgroundPhotoCount = backgroundPhotoPaths.size,
-        rotationHoursText = rotationHoursText,
-        photoStatus = photoStatus,
-        onTitleChanged = { title = it },
-        onTargetDateChanged = { targetDate = it },
-        onAccentThemeChanged = { accentTheme = it },
-        onRotationHoursChanged = {
-            rotationHoursText = it.filter { char -> char.isDigit() }.take(3)
-        },
-        onPickPhotos = {
-            photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-        },
-        onPickFiles = {
-            filePickerLauncher.launch(arrayOf("image/*"))
-        },
-        onClearPhotos = {
-            scope.launch {
-                photoStorage.clearPhotos(backgroundPhotoPaths)
-                backgroundPhotoPaths = emptyList()
-                persistConfig(updatedPhotoPaths = emptyList())
-                photoStatus = "Background photos cleared"
-            }
-        },
-        onSave = {
-            scope.launch {
-                persistConfig()
-                photoStatus = if (backgroundPhotoPaths.isEmpty()) {
-                    "Countdown saved"
-                } else {
-                    "Countdown saved with ${backgroundPhotoPaths.size} photo${if (backgroundPhotoPaths.size == 1) "" else "s"}"
+    when (currentScreen) {
+        DESTINATION_DETAIL -> EventDetailScreen(
+            config = CountdownConfig(
+                title = title.ifBlank { DEFAULT_TITLE },
+                targetDateTime = targetDateTime,
+                accentTheme = accentTheme,
+                description = description,
+                extraFieldEnabled = extraFieldEnabled,
+                extraFieldLabel = extraFieldLabel,
+                extraFieldValue = extraFieldValue,
+                backgroundPhotoPaths = backgroundPhotoPaths,
+                rotationHours = rotationHoursText.toIntOrNull()?.coerceIn(1, 168) ?: 24
+            ),
+            onEdit = { currentScreen = DESTINATION_EDIT }
+        )
+
+        else -> CountdownScreen(
+            title = title,
+            targetDateTime = targetDateTime,
+            accentTheme = accentTheme,
+            description = description,
+            extraFieldEnabled = extraFieldEnabled,
+            extraFieldLabel = extraFieldLabel,
+            extraFieldValue = extraFieldValue,
+            backgroundPhotoCount = backgroundPhotoPaths.size,
+            rotationHoursText = rotationHoursText,
+            photoStatus = photoStatus,
+            onTitleChanged = { title = it },
+            onTargetDateTimeChanged = { targetDateTime = it },
+            onDescriptionChanged = { description = it },
+            onExtraFieldEnabledChanged = {
+                extraFieldEnabled = it
+                if (!it) {
+                    extraFieldLabel = ""
+                    extraFieldValue = ""
+                }
+            },
+            onExtraFieldLabelChanged = { extraFieldLabel = it },
+            onExtraFieldValueChanged = { extraFieldValue = it },
+            onAccentThemeChanged = { accentTheme = it },
+            onRotationHoursChanged = {
+                rotationHoursText = it.filter { char -> char.isDigit() }.take(3)
+            },
+            onPickPhotos = {
+                photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            },
+            onPickFiles = {
+                filePickerLauncher.launch(arrayOf("image/*"))
+            },
+            onClearPhotos = {
+                scope.launch {
+                    photoStorage.clearPhotos(backgroundPhotoPaths)
+                    backgroundPhotoPaths = emptyList()
+                    persistConfig(updatedPhotoPaths = emptyList())
+                    photoStatus = "Background photos cleared"
+                }
+            },
+            onSave = {
+                scope.launch {
+                    persistConfig()
+                    currentScreen = DESTINATION_DETAIL
+                    photoStatus = if (backgroundPhotoPaths.isEmpty()) {
+                        "Countdown saved"
+                    } else {
+                        "Countdown saved with ${backgroundPhotoPaths.size} photo${if (backgroundPhotoPaths.size == 1) "" else "s"}"
+                    }
                 }
             }
-        }
-    )
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun CountdownScreen(
     title: String,
-    targetDate: LocalDate,
+    targetDateTime: LocalDateTime,
     accentTheme: AccentTheme,
+    description: String,
+    extraFieldEnabled: Boolean,
+    extraFieldLabel: String,
+    extraFieldValue: String,
     backgroundPhotoCount: Int,
     rotationHoursText: String,
     photoStatus: String?,
     onTitleChanged: (String) -> Unit,
-    onTargetDateChanged: (LocalDate) -> Unit,
+    onTargetDateTimeChanged: (LocalDateTime) -> Unit,
+    onDescriptionChanged: (String) -> Unit,
+    onExtraFieldEnabledChanged: (Boolean) -> Unit,
+    onExtraFieldLabelChanged: (String) -> Unit,
+    onExtraFieldValueChanged: (String) -> Unit,
     onAccentThemeChanged: (AccentTheme) -> Unit,
     onRotationHoursChanged: (String) -> Unit,
     onPickPhotos: () -> Unit,
@@ -224,25 +285,39 @@ private fun CountdownScreen(
     onSave: () -> Unit
 ) {
     val rotationHours = rotationHoursText.toIntOrNull()?.coerceIn(1, 168) ?: 24
-    val presentation = remember(title, targetDate, accentTheme, backgroundPhotoCount, rotationHours) {
-        CountdownCalculator.presentation(
-            CountdownConfig(
-                title = title,
-                targetDate = targetDate,
-                accentTheme = accentTheme,
-                backgroundPhotoPaths = List(backgroundPhotoCount) { "preview" },
-                rotationHours = rotationHours
-            )
+    val previewConfig = remember(
+        title,
+        targetDateTime,
+        accentTheme,
+        description,
+        extraFieldEnabled,
+        extraFieldLabel,
+        extraFieldValue,
+        backgroundPhotoCount,
+        rotationHours
+    ) {
+        CountdownConfig(
+            title = title.ifBlank { DEFAULT_TITLE },
+            targetDateTime = targetDateTime,
+            accentTheme = accentTheme,
+            description = description,
+            extraFieldEnabled = extraFieldEnabled,
+            extraFieldLabel = extraFieldLabel,
+            extraFieldValue = extraFieldValue,
+            backgroundPhotoPaths = List(backgroundPhotoCount) { "preview" },
+            rotationHours = rotationHours
         )
     }
+    val presentation = remember(previewConfig) { CountdownCalculator.presentation(previewConfig) }
 
     val dateFormatter = remember { DateTimeFormatter.ofPattern("MMM d, yyyy") }
+    val timeFormatter = remember { DateTimeFormatter.ofPattern("h:mm a") }
     var showDatePicker by remember { mutableStateOf(false) }
 
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = targetDate
-                .atStartOfDay(ZoneId.systemDefault())
+            initialSelectedDateMillis = targetDateTime
+                .atZone(ZoneId.systemDefault())
                 .toInstant()
                 .toEpochMilli()
         )
@@ -252,11 +327,10 @@ private fun CountdownScreen(
                 TextButton(
                     onClick = {
                         datePickerState.selectedDateMillis?.let { millis ->
-                            onTargetDateChanged(
-                                Instant.ofEpochMilli(millis)
-                                    .atZone(ZoneId.systemDefault())
-                                    .toLocalDate()
-                            )
+                            val selectedDate = Instant.ofEpochMilli(millis)
+                                .atZone(ZoneId.systemDefault())
+                                .toLocalDate()
+                            onTargetDateTimeChanged(LocalDateTime.of(selectedDate, targetDateTime.toLocalTime()))
                         }
                         showDatePicker = false
                     }
@@ -271,6 +345,7 @@ private fun CountdownScreen(
     }
 
     val scrollState = rememberScrollState()
+    val context = LocalContext.current
 
     Scaffold { padding ->
         Column(
@@ -282,66 +357,12 @@ private fun CountdownScreen(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        brush = Brush.linearGradient(
-                            colors = listOf(
-                                accentTheme.surfaceTintComposeColor,
-                                accentTheme.surfaceComposeColor
-                            )
-                        ),
-                        shape = RoundedCornerShape(28.dp)
-                    )
-                    .padding(24.dp)
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(12.dp)
-                                .background(accentTheme.accentComposeColor, CircleShape)
-                        )
-                        Spacer(modifier = Modifier.size(8.dp))
-                        Text(
-                            text = "Countdown preview",
-                            color = Color(0xFFC5D0E0),
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                    }
-                    Text(
-                        text = title.ifBlank { "Untitled countdown" },
-                        color = Color.White,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = presentation.daysValue,
-                        color = Color.White,
-                        fontSize = 84.sp,
-                        fontWeight = FontWeight.Bold,
-                        lineHeight = 84.sp
-                    )
-                    Text(
-                        text = presentation.statusLabel,
-                        color = Color(0xFFCAD5E2),
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = targetDate.format(dateFormatter),
-                        color = Color(0xFF91A4BB),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    if (backgroundPhotoCount > 0) {
-                        Text(
-                            text = "$backgroundPhotoCount background photo${if (backgroundPhotoCount == 1) "" else "s"} • rotate every $rotationHours hour${if (rotationHours == 1) "" else "s"}",
-                            color = Color(0xFFDDE7F4),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                }
-            }
+            EventHeroCard(
+                config = previewConfig,
+                daysValue = presentation.daysValue,
+                statusLabel = presentation.statusLabel,
+                targetLabel = presentation.detailLabelDateTime
+            )
 
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF121927)),
@@ -352,7 +373,7 @@ private fun CountdownScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
-                        text = "Widget details",
+                        text = "Event setup",
                         color = Color.White,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold
@@ -365,16 +386,41 @@ private fun CountdownScreen(
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                         singleLine = true
                     )
-                    OutlinedButton(
-                        onClick = { showDatePicker = true },
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.CalendarMonth,
-                            contentDescription = null
-                        )
-                        Spacer(modifier = Modifier.size(10.dp))
-                        Text(targetDate.format(dateFormatter))
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = onDescriptionChanged,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Description") },
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                        minLines = 3
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(
+                            onClick = { showDatePicker = true },
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+                        ) {
+                            Icon(Icons.Rounded.CalendarMonth, contentDescription = null)
+                            Spacer(modifier = Modifier.size(10.dp))
+                            Text(targetDateTime.format(dateFormatter))
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                TimePickerDialog(
+                                    context,
+                                    { _, hour, minute ->
+                                        onTargetDateTimeChanged(
+                                            LocalDateTime.of(targetDateTime.toLocalDate(), LocalTime.of(hour, minute))
+                                        )
+                                    },
+                                    targetDateTime.hour,
+                                    targetDateTime.minute,
+                                    false
+                                ).show()
+                            },
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+                        ) {
+                            Text(targetDateTime.format(timeFormatter))
+                        }
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
@@ -398,6 +444,44 @@ private fun CountdownScreen(
                                 )
                             }
                         }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Optional field",
+                                color = Color.White,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Use this for location, dress code, confirmation code, or anything else.",
+                                color = Color(0xFF93A4B8),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        Switch(checked = extraFieldEnabled, onCheckedChange = onExtraFieldEnabledChanged)
+                    }
+                    if (extraFieldEnabled) {
+                        OutlinedTextField(
+                            value = extraFieldLabel,
+                            onValueChange = onExtraFieldLabelChanged,
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Optional field label") },
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = extraFieldValue,
+                            onValueChange = onExtraFieldValueChanged,
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Optional field value") },
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                            singleLine = true
+                        )
                     }
                 }
             }
@@ -468,14 +552,140 @@ private fun CountdownScreen(
                 onClick = onSave,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Save & refresh widget")
+                Text("Save & open event")
             }
-
-            Text(
-                text = "Add the widget from your launcher to pin this countdown to your home screen.",
-                color = Color(0xFF72839B),
-                style = MaterialTheme.typography.bodyMedium
-            )
         }
     }
 }
+
+@Composable
+private fun EventHeroCard(
+    config: CountdownConfig,
+    daysValue: String,
+    statusLabel: String,
+    targetLabel: String
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        config.accentTheme.surfaceTintComposeColor,
+                        config.accentTheme.surfaceComposeColor
+                    )
+                ),
+                shape = RoundedCornerShape(28.dp)
+            )
+            .padding(24.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .background(config.accentTheme.accentComposeColor, CircleShape)
+                )
+                Spacer(modifier = Modifier.size(8.dp))
+                Text(
+                    text = "Event preview",
+                    color = Color(0xFFC5D0E0),
+                    style = MaterialTheme.typography.labelLarge
+                )
+            }
+            Text(
+                text = config.title.ifBlank { "Untitled event" },
+                color = Color.White,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = daysValue,
+                color = Color.White,
+                fontSize = 84.sp,
+                fontWeight = FontWeight.Bold,
+                lineHeight = 84.sp
+            )
+            Text(
+                text = statusLabel,
+                color = Color(0xFFCAD5E2),
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = targetLabel,
+                color = Color(0xFF91A4BB),
+                style = MaterialTheme.typography.bodyMedium
+            )
+            if (config.description.isNotBlank()) {
+                Text(
+                    text = config.description,
+                    color = Color(0xFFDDE7F4),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            if (config.extraFieldEnabled && config.extraFieldValue.isNotBlank()) {
+                Text(
+                    text = "${config.extraFieldLabel.ifBlank { "Detail" }}: ${config.extraFieldValue}",
+                    color = Color(0xFFDDE7F4),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventDetailScreen(
+    config: CountdownConfig,
+    onEdit: () -> Unit
+) {
+    val presentation = remember(config) { CountdownCalculator.presentation(config) }
+    Scaffold { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF0C1018))
+                .verticalScroll(rememberScrollState())
+                .padding(padding)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            EventHeroCard(
+                config = config,
+                daysValue = presentation.daysValue,
+                statusLabel = presentation.statusLabel,
+                targetLabel = presentation.detailLabelDateTime
+            )
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF121927)),
+                shape = RoundedCornerShape(24.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("Event details", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    DetailRow("When", presentation.detailLabelDateTime)
+                    if (config.description.isNotBlank()) DetailRow("Description", config.description)
+                    if (config.extraFieldEnabled && config.extraFieldValue.isNotBlank()) {
+                        DetailRow(config.extraFieldLabel.ifBlank { "Extra" }, config.extraFieldValue)
+                    }
+                }
+            }
+            Button(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Rounded.Edit, contentDescription = null)
+                Spacer(modifier = Modifier.size(8.dp))
+                Text("Edit event")
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, color = Color(0xFF93A4B8), style = MaterialTheme.typography.labelLarge)
+        Text(value, color = Color.White, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
