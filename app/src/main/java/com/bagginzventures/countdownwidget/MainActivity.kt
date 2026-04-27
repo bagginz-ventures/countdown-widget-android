@@ -10,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -66,8 +67,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -83,10 +87,12 @@ import com.bagginzventures.countdownwidget.data.PhotoStorage
 import com.bagginzventures.countdownwidget.ui.theme.CountdownWidgetTheme
 import com.bagginzventures.countdownwidget.widget.CountdownAppWidgetProvider
 import kotlinx.coroutines.launch
+import java.io.File
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 const val EXTRA_DESTINATION = "destination"
@@ -556,16 +562,43 @@ private fun CountdownSettingsScreen(
 
 @Composable
 private fun EventHeroCard(config: CountdownConfig, daysValue: String, statusLabel: String, targetLabel: String) {
+    val context = LocalContext.current
+    val photoStorage = remember(context) { PhotoStorage(context) }
+    val activePhotoPath = remember(config.backgroundPhotoPaths, config.rotationHours) {
+        resolveActivePhotoPath(config.backgroundPhotoPaths, config.rotationHours)
+    }
+    val backgroundBitmap = remember(activePhotoPath) {
+        activePhotoPath?.takeIf { File(it).exists() }?.let { path -> photoStorage.loadBitmap(path) }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(28.dp))
             .background(
                 brush = Brush.linearGradient(listOf(config.accentTheme.surfaceTintComposeColor, config.accentTheme.surfaceComposeColor)),
                 shape = RoundedCornerShape(28.dp)
             )
-            .padding(24.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (backgroundBitmap != null) {
+            Image(
+                bitmap = backgroundBitmap.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+                alpha = 0.78f
+            )
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Color(0x66000000))
+            )
+        }
+
+        Column(
+            modifier = Modifier.padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(modifier = Modifier.size(12.dp).background(config.accentTheme.accentComposeColor, CircleShape))
                 Spacer(modifier = Modifier.size(8.dp))
@@ -581,6 +614,15 @@ private fun EventHeroCard(config: CountdownConfig, daysValue: String, statusLabe
             }
         }
     }
+}
+
+private fun resolveActivePhotoPath(photoPaths: List<String>, rotationHours: Int): String? {
+    if (photoPaths.isEmpty()) return null
+    if (photoPaths.size == 1) return photoPaths.first()
+    val rotationWindow = rotationHours.coerceIn(1, 168)
+    val epochHours = Instant.now().atZone(ZoneOffset.UTC).toEpochSecond() / 3600
+    val index = ((epochHours / rotationWindow) % photoPaths.size).toInt()
+    return photoPaths.getOrNull(index)
 }
 
 @Composable
