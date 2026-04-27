@@ -383,14 +383,18 @@ private fun CountdownSettingsScreen(
 
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = config.targetDateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            initialSelectedDateMillis = config.targetDateTime
+                .toLocalDate()
+                .atStartOfDay(ZoneOffset.UTC)
+                .toInstant()
+                .toEpochMilli()
         )
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { millis ->
-                        val selectedDate = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
+                        val selectedDate = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
                         onTargetDateTimeChanged(LocalDateTime.of(selectedDate, config.targetDateTime.toLocalTime()))
                     }
                     showDatePicker = false
