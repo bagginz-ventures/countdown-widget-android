@@ -10,7 +10,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.view.View
 import android.widget.RemoteViews
-import com.bagginzventures.countdownwidget.DESTINATION_DETAIL
+import com.bagginzventures.countdownwidget.DESTINATION_HOME
 import com.bagginzventures.countdownwidget.EXTRA_DESTINATION
 import com.bagginzventures.countdownwidget.MainActivity
 import com.bagginzventures.countdownwidget.R
@@ -100,8 +100,8 @@ class CountdownAppWidgetProvider : AppWidgetProvider() {
                     context,
                     991,
                     Intent(context, MainActivity::class.java).apply {
-                        putExtra(EXTRA_DESTINATION, DESTINATION_DETAIL)
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        putExtra(EXTRA_DESTINATION, DESTINATION_HOME)
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                     },
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
