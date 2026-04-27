@@ -21,8 +21,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CalendarMonth
@@ -109,6 +111,20 @@ private fun CountdownApp(
     var rotationHoursText by remember { mutableStateOf(config.rotationHours.toString()) }
     var photoStatus by remember { mutableStateOf<String?>(null) }
 
+    suspend fun persistConfig(updatedPhotoPaths: List<String> = backgroundPhotoPaths) {
+        val rotationHours = rotationHoursText.toIntOrNull()?.coerceIn(1, 168) ?: 24
+        repository.save(
+            CountdownConfig(
+                title = title.ifBlank { DEFAULT_TITLE },
+                targetDate = targetDate,
+                accentTheme = accentTheme,
+                backgroundPhotoPaths = updatedPhotoPaths,
+                rotationHours = rotationHours
+            )
+        )
+        CountdownAppWidgetProvider.updateAllWidgets(appContext)
+    }
+
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 20)
     ) { uris: List<Uri> ->
@@ -116,7 +132,8 @@ private fun CountdownApp(
             scope.launch {
                 val cached = photoStorage.replacePhotos(uris, backgroundPhotoPaths)
                 backgroundPhotoPaths = cached
-                photoStatus = "${cached.size} background photo${if (cached.size == 1) "" else "s"} selected"
+                persistConfig(updatedPhotoPaths = cached)
+                photoStatus = "${cached.size} background photo${if (cached.size == 1) "" else "s"} selected and applied"
             }
         }
     }
@@ -149,27 +166,18 @@ private fun CountdownApp(
             scope.launch {
                 photoStorage.clearPhotos(backgroundPhotoPaths)
                 backgroundPhotoPaths = emptyList()
+                persistConfig(updatedPhotoPaths = emptyList())
                 photoStatus = "Background photos cleared"
             }
         },
         onSave = {
             scope.launch {
-                val rotationHours = rotationHoursText.toIntOrNull()?.coerceIn(1, 168) ?: 24
-                repository.save(
-                    CountdownConfig(
-                        title = title.ifBlank { DEFAULT_TITLE },
-                        targetDate = targetDate,
-                        accentTheme = accentTheme,
-                        backgroundPhotoPaths = backgroundPhotoPaths,
-                        rotationHours = rotationHours
-                    )
-                )
+                persistConfig()
                 photoStatus = if (backgroundPhotoPaths.isEmpty()) {
                     "Countdown saved"
                 } else {
                     "Countdown saved with ${backgroundPhotoPaths.size} photo${if (backgroundPhotoPaths.size == 1) "" else "s"}"
                 }
-                CountdownAppWidgetProvider.updateAllWidgets(appContext)
             }
         }
     )
@@ -239,11 +247,14 @@ private fun CountdownScreen(
         }
     }
 
+    val scrollState = rememberScrollState()
+
     Scaffold { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0xFF0C1018))
+                .verticalScroll(scrollState)
                 .padding(padding)
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
