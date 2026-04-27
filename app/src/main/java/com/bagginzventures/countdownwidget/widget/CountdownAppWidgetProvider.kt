@@ -180,8 +180,10 @@ class CountdownAppWidgetProvider : AppWidgetProvider() {
             val minHeight = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT) ?: 0
 
             return when {
-                minWidth <= 110 && minHeight <= 110 -> WidgetLayoutMode.SMALL
-                minWidth <= 180 || minHeight <= 110 -> WidgetLayoutMode.COMPACT
+                // Some launchers report a visually 1x1 widget larger than the old 110dp threshold.
+                // Keep anything roughly in that smallest bucket on the days-only layout.
+                minWidth <= 150 && minHeight <= 150 -> WidgetLayoutMode.SMALL
+                minWidth <= 220 || minHeight <= 150 -> WidgetLayoutMode.COMPACT
                 else -> WidgetLayoutMode.FULL
             }
         }
