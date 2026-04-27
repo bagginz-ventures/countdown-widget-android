@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Collections
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -125,15 +126,33 @@ private fun CountdownApp(
         CountdownAppWidgetProvider.updateAllWidgets(appContext)
     }
 
+    suspend fun cacheAndApplyPhotos(uris: List<Uri>, sourceLabel: String) {
+        val cached = photoStorage.replacePhotos(uris, backgroundPhotoPaths)
+        backgroundPhotoPaths = cached
+        persistConfig(updatedPhotoPaths = cached)
+        photoStatus = if (cached.isEmpty()) {
+            "No images were imported from $sourceLabel"
+        } else {
+            "${cached.size} background photo${if (cached.size == 1) "" else "s"} imported from $sourceLabel"
+        }
+    }
+
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 20)
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
             scope.launch {
-                val cached = photoStorage.replacePhotos(uris, backgroundPhotoPaths)
-                backgroundPhotoPaths = cached
-                persistConfig(updatedPhotoPaths = cached)
-                photoStatus = "${cached.size} background photo${if (cached.size == 1) "" else "s"} selected and applied"
+                cacheAndApplyPhotos(uris, "Photos")
+            }
+        }
+    }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            scope.launch {
+                cacheAndApplyPhotos(uris, "Files")
             }
         }
     }
@@ -161,6 +180,9 @@ private fun CountdownApp(
         },
         onPickPhotos = {
             photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        },
+        onPickFiles = {
+            filePickerLauncher.launch(arrayOf("image/*"))
         },
         onClearPhotos = {
             scope.launch {
@@ -197,6 +219,7 @@ private fun CountdownScreen(
     onAccentThemeChanged: (AccentTheme) -> Unit,
     onRotationHoursChanged: (String) -> Unit,
     onPickPhotos: () -> Unit,
+    onPickFiles: () -> Unit,
     onClearPhotos: () -> Unit,
     onSave: () -> Unit
 ) {
@@ -394,15 +417,23 @@ private fun CountdownScreen(
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        text = "Pick photos from your device or provider-backed pickers like Google Photos. The app caches copies locally for reliable widget rendering.",
+                        text = "Use Photos for normal gallery picks, or Files for Downloads and provider-backed image sources. Both paths stay image-only, and the app caches copies locally for reliable widget rendering.",
                         color = Color(0xFFCAD5E2),
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                         Button(onClick = onPickPhotos) {
                             Icon(Icons.Rounded.Collections, contentDescription = null)
                             Spacer(modifier = Modifier.size(8.dp))
-                            Text("Choose photos")
+                            Text("Choose from Photos")
+                        }
+                        OutlinedButton(onClick = onPickFiles) {
+                            Icon(Icons.Rounded.FolderOpen, contentDescription = null)
+                            Spacer(modifier = Modifier.size(8.dp))
+                            Text("Choose from Files")
                         }
                         if (backgroundPhotoCount > 0) {
                             OutlinedButton(onClick = onClearPhotos) {

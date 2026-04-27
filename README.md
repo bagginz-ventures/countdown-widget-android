@@ -1,6 +1,6 @@
 # Countdown Widget Android
 
-A polished v1 Android home-screen countdown widget app built in Kotlin. It lets the user set a single countdown title, target date, and accent theme, then shows a large days-left number directly on a real Android widget.
+A polished Android home-screen countdown widget app built in Kotlin. It lets the user set a single countdown title, target date, accent theme, and rotating background photos, then shows a large days-left number directly on a real Android widget.
 
 ## What was built
 
@@ -13,10 +13,13 @@ A polished v1 Android home-screen countdown widget app built in Kotlin. It lets 
   - large days-left number
   - premium dark card styling
   - title, status label, target date, accent chip
+  - optional photo background behind widget content
 - Simple edit screen for:
   - countdown title
   - target date picker
   - accent theme selection
+  - image-only background imports from Photos and Files/Downloads/providers
+  - background rotation interval
 - Automatic refresh behavior:
   - daily scheduled updates via `AlarmManager`
   - refresh on date/time/timezone changes
@@ -49,7 +52,9 @@ Recommended local environment:
 
 ```bash
 ./gradlew test
+./gradlew lint
 ./gradlew assembleDebug
+./gradlew assembleRelease
 ```
 
 ## Verification status
@@ -70,6 +75,7 @@ Because of that, I could **not** run:
 
 ## Notes / scope
 
-- v1 stores **one shared countdown configuration** locally and all widget instances display that same countdown.
-- This keeps the first version small, clean, and shippable.
+- The app stores **one shared countdown configuration** locally and all widget instances display that same countdown.
+- Background images are imported through image-only pickers and then cached locally so widget rendering stays reliable.
+- Current requirement tracking for broader image import coverage lives in issue **#1**: image-only provider/download import for widget backgrounds.
 - A future v2 could add per-widget configuration, richer backgrounds, multiple countdowns, and lock-screen support.
