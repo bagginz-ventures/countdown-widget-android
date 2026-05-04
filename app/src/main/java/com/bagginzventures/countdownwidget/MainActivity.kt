@@ -1,6 +1,7 @@
 package com.bagginzventures.countdownwidget
 
 import android.app.TimePickerDialog
+import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -32,6 +33,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Collections
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Menu
@@ -82,6 +84,7 @@ import com.bagginzventures.countdownwidget.data.AccentTheme
 import com.bagginzventures.countdownwidget.data.CountdownCalculator
 import com.bagginzventures.countdownwidget.data.CountdownConfig
 import com.bagginzventures.countdownwidget.data.CountdownRepository
+import com.bagginzventures.countdownwidget.data.CountdownStore
 import com.bagginzventures.countdownwidget.data.DEFAULT_TITLE
 import com.bagginzventures.countdownwidget.data.PhotoStorage
 import com.bagginzventures.countdownwidget.ui.theme.CountdownWidgetTheme
@@ -96,15 +99,23 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 const val EXTRA_DESTINATION = "destination"
+const val EXTRA_EVENT_ID = "event_id"
 const val DESTINATION_HOME = "home"
 const val DESTINATION_SETTINGS = "settings"
 
 class MainActivity : ComponentActivity() {
     private val requestedDestination = mutableStateOf(DESTINATION_HOME)
+    private val requestedEventId = mutableStateOf<String?>(null)
+    private val requestedWidgetId = mutableStateOf<Int?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestedDestination.value = resolveDestination(intent)
+        requestedEventId.value = resolveEventId(intent)
+        requestedWidgetId.value = resolveAppWidgetId(intent)
+        requestedWidgetId.value?.let { widgetId ->
+            setResult(RESULT_CANCELED, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId))
+        }
         val repository = CountdownRepository(applicationContext)
         setContent {
             CountdownWidgetTheme {
@@ -112,7 +123,13 @@ class MainActivity : ComponentActivity() {
                     CountdownApp(
                         repository = repository,
                         appContext = applicationContext,
-                        requestedDestination = requestedDestination.value
+                        requestedDestination = requestedDestination.value,
+                        requestedEventId = requestedEventId.value,
+                        requestedWidgetId = requestedWidgetId.value,
+                        onWidgetConfigured = { widgetId ->
+                            setResult(RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId))
+                            finish()
+                        }
                     )
                 }
             }
@@ -123,54 +140,79 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         requestedDestination.value = resolveDestination(intent)
+        requestedEventId.value = resolveEventId(intent)
+        requestedWidgetId.value = resolveAppWidgetId(intent)
     }
 
     private fun resolveDestination(intent: Intent?): String =
         intent?.getStringExtra(EXTRA_DESTINATION) ?: DESTINATION_HOME
+
+    private fun resolveEventId(intent: Intent?): String? = intent?.getStringExtra(EXTRA_EVENT_ID)
+
+    private fun resolveAppWidgetId(intent: Intent?): Int? {
+        val widgetId = intent?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+            ?: AppWidgetManager.INVALID_APPWIDGET_ID
+        return widgetId.takeIf { it != AppWidgetManager.INVALID_APPWIDGET_ID }
+    }
 }
 
 @Composable
 private fun CountdownApp(
     repository: CountdownRepository,
     appContext: Context,
-    requestedDestination: String
+    requestedDestination: String,
+    requestedEventId: String?,
+    requestedWidgetId: Int?,
+    onWidgetConfigured: (Int) -> Unit
 ) {
-    val config by repository.config.collectAsState(initial = CountdownConfig())
+    val store by repository.store.collectAsState(initial = CountdownStore())
     val scope = rememberCoroutineScope()
     val photoStorage = remember(appContext) { PhotoStorage(appContext) }
 
     var currentScreen by remember { mutableStateOf(requestedDestination) }
-    var title by remember { mutableStateOf(config.title) }
-    var targetDateTime by remember { mutableStateOf(config.targetDateTime) }
-    var accentTheme by remember { mutableStateOf(config.accentTheme) }
-    var description by remember { mutableStateOf(config.description) }
-    var extraFieldEnabled by remember { mutableStateOf(config.extraFieldEnabled) }
-    var extraFieldLabel by remember { mutableStateOf(config.extraFieldLabel) }
-    var extraFieldValue by remember { mutableStateOf(config.extraFieldValue) }
-    var backgroundPhotoPaths by remember { mutableStateOf(config.backgroundPhotoPaths) }
-    var rotationHoursText by remember { mutableStateOf(config.rotationHours.toString()) }
+    var currentEventId by remember { mutableStateOf<String?>(requestedEventId ?: store.selectedEventId) }
+    val currentConfig = store.resolveEvent(currentEventId)
+    var title by remember { mutableStateOf(currentConfig.title) }
+    var targetDateTime by remember { mutableStateOf(currentConfig.targetDateTime) }
+    var accentTheme by remember { mutableStateOf(currentConfig.accentTheme) }
+    var description by remember { mutableStateOf(currentConfig.description) }
+    var extraFieldEnabled by remember { mutableStateOf(currentConfig.extraFieldEnabled) }
+    var extraFieldLabel by remember { mutableStateOf(currentConfig.extraFieldLabel) }
+    var extraFieldValue by remember { mutableStateOf(currentConfig.extraFieldValue) }
+    var backgroundPhotoPaths by remember { mutableStateOf(currentConfig.backgroundPhotoPaths) }
+    var rotationHoursText by remember { mutableStateOf(currentConfig.rotationHours.toString()) }
     var photoStatus by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(requestedDestination) {
         currentScreen = requestedDestination
     }
 
-    LaunchedEffect(config) {
-        title = config.title
-        targetDateTime = config.targetDateTime
-        accentTheme = config.accentTheme
-        description = config.description
-        extraFieldEnabled = config.extraFieldEnabled
-        extraFieldLabel = config.extraFieldLabel
-        extraFieldValue = config.extraFieldValue
-        backgroundPhotoPaths = config.backgroundPhotoPaths
-        rotationHoursText = config.rotationHours.toString()
+    LaunchedEffect(store.events, store.selectedEventId, requestedEventId) {
+        val desiredEventId = when {
+            requestedEventId != null && store.events.any { it.id == requestedEventId } -> requestedEventId
+            currentEventId != null && store.events.any { it.id == currentEventId } -> currentEventId
+            else -> store.selectedEventId
+        }
+        currentEventId = desiredEventId
+    }
+
+    LaunchedEffect(currentConfig.id) {
+        title = currentConfig.title
+        targetDateTime = currentConfig.targetDateTime
+        accentTheme = currentConfig.accentTheme
+        description = currentConfig.description
+        extraFieldEnabled = currentConfig.extraFieldEnabled
+        extraFieldLabel = currentConfig.extraFieldLabel
+        extraFieldValue = currentConfig.extraFieldValue
+        backgroundPhotoPaths = currentConfig.backgroundPhotoPaths
+        rotationHoursText = currentConfig.rotationHours.toString()
     }
 
     suspend fun persistConfig(updatedPhotoPaths: List<String> = backgroundPhotoPaths) {
         val rotationHours = rotationHoursText.toIntOrNull()?.coerceIn(1, 168) ?: 24
-        repository.save(
+        repository.saveEvent(
             CountdownConfig(
+                id = currentConfig.id,
                 title = title.ifBlank { DEFAULT_TITLE },
                 targetDateTime = targetDateTime,
                 accentTheme = accentTheme,
@@ -209,6 +251,7 @@ private fun CountdownApp(
     }
 
     val liveConfig = CountdownConfig(
+        id = currentConfig.id,
         title = title.ifBlank { DEFAULT_TITLE },
         targetDateTime = targetDateTime,
         accentTheme = accentTheme,
@@ -223,6 +266,7 @@ private fun CountdownApp(
     when (currentScreen) {
         DESTINATION_SETTINGS -> CountdownSettingsScreen(
             config = liveConfig,
+            isWidgetConfigMode = requestedWidgetId != null,
             photoStatus = photoStatus,
             backgroundPhotoCount = backgroundPhotoPaths.size,
             rotationHoursText = rotationHoursText,
@@ -259,12 +303,67 @@ private fun CountdownApp(
                     photoStatus = "Event settings saved"
                     currentScreen = DESTINATION_HOME
                 }
+            },
+            onSaveAndAssignWidget = {
+                requestedWidgetId?.let { widgetId ->
+                    scope.launch {
+                        persistConfig()
+                        repository.bindWidgetToEvent(widgetId, currentConfig.id)
+                        repository.setSelectedEvent(currentConfig.id)
+                        CountdownAppWidgetProvider.updateAllWidgets(appContext)
+                        onWidgetConfigured(widgetId)
+                    }
+                }
+            },
+            onDeleteEvent = {
+                scope.launch {
+                    photoStorage.clearPhotos(currentConfig.backgroundPhotoPaths)
+                    repository.deleteEvent(currentConfig.id)
+                    CountdownAppWidgetProvider.updateAllWidgets(appContext)
+                    photoStatus = "Event deleted"
+                    currentScreen = DESTINATION_HOME
+                }
             }
         )
 
         else -> EventHomeScreen(
+            events = store.events,
+            selectedEventId = currentConfig.id,
             config = liveConfig,
-            onNavigateSettings = { currentScreen = DESTINATION_SETTINGS }
+            widgetConfigMode = requestedWidgetId != null,
+            onNavigateSettings = { currentScreen = DESTINATION_SETTINGS },
+            onSelectEvent = { eventId ->
+                currentEventId = eventId
+                scope.launch { repository.setSelectedEvent(eventId) }
+            },
+            onCreateEvent = {
+                scope.launch {
+                    val created = repository.createEvent()
+                    currentEventId = created.id
+                    photoStatus = null
+                    currentScreen = DESTINATION_SETTINGS
+                    CountdownAppWidgetProvider.updateAllWidgets(appContext)
+                }
+            },
+            onDuplicateEvent = {
+                scope.launch {
+                    val created = repository.createEvent(currentConfig.copy(id = "", title = "${currentConfig.title} copy"))
+                    currentEventId = created.id
+                    photoStatus = null
+                    currentScreen = DESTINATION_SETTINGS
+                    CountdownAppWidgetProvider.updateAllWidgets(appContext)
+                }
+            },
+            onAssignWidget = { eventId ->
+                requestedWidgetId?.let { widgetId ->
+                    scope.launch {
+                        repository.bindWidgetToEvent(widgetId, eventId)
+                        repository.setSelectedEvent(eventId)
+                        CountdownAppWidgetProvider.updateAllWidgets(appContext)
+                        onWidgetConfigured(widgetId)
+                    }
+                }
+            }
         )
     }
 }
@@ -311,14 +410,22 @@ private fun EventShell(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun EventHomeScreen(
+    events: List<CountdownConfig>,
+    selectedEventId: String,
     config: CountdownConfig,
-    onNavigateSettings: () -> Unit
+    widgetConfigMode: Boolean,
+    onNavigateSettings: () -> Unit,
+    onSelectEvent: (String) -> Unit,
+    onCreateEvent: () -> Unit,
+    onDuplicateEvent: () -> Unit,
+    onAssignWidget: (String) -> Unit
 ) {
     val presentation = remember(config) { CountdownCalculator.presentation(config) }
     EventShell(
-        title = config.title.ifBlank { "Event" },
+        title = if (widgetConfigMode) "Choose event for widget" else config.title.ifBlank { "Event" },
         onNavigateHome = null,
         onOpenSettings = onNavigateSettings
     ) { padding ->
@@ -331,15 +438,77 @@ private fun EventHomeScreen(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
+            if (widgetConfigMode) {
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF162235)), shape = RoundedCornerShape(24.dp)) {
+                    Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Widget setup", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text("Choose an event, then assign it to this widget. Each widget can point at a different event.", color = Color(0xFFCAD5E2), style = MaterialTheme.typography.bodyMedium)
+                        Button(onClick = { onAssignWidget(selectedEventId) }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Use this event for widget")
+                        }
+                    }
+                }
+            }
+
             EventHeroCard(
                 config = config,
                 daysValue = presentation.daysValue,
                 statusLabel = presentation.statusLabel,
+                breakdownLabel = presentation.breakdownLabel,
                 targetLabel = presentation.detailLabelDateTime
             )
             Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF121927)), shape = RoundedCornerShape(24.dp)) {
                 Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text("Events", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    }
+                    Text("${events.size} saved ${if (events.size == 1) "event" else "events"}. Tap one to preview it here.", color = Color(0xFF93A4B8), style = MaterialTheme.typography.bodyMedium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(onClick = onCreateEvent) {
+                            Icon(Icons.Rounded.Add, contentDescription = null)
+                            Spacer(modifier = Modifier.size(8.dp))
+                            Text("Add event")
+                        }
+                        OutlinedButton(onClick = onDuplicateEvent) {
+                            Text("Duplicate selected")
+                        }
+                    }
+                    events.forEach { event ->
+                        val selected = event.id == selectedEventId
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = if (selected) Color(0xFF162235) else Color(0xFF0F1724)),
+                            shape = RoundedCornerShape(20.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(event.title.ifBlank { "Untitled event" }, color = if (selected) Color.White else Color(0xFFE7ECF5), fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
+                                        Text(event.targetDateTime.format(DateTimeFormatter.ofPattern("MMM d, yyyy • h:mm a")), color = Color(0xFF93A4B8), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    if (selected) {
+                                        Text("Selected", color = Color(0xFF76E4F7), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    OutlinedButton(onClick = { onSelectEvent(event.id) }) {
+                                        Text(if (selected) "Previewing" else "Preview")
+                                    }
+                                    if (widgetConfigMode) {
+                                        Button(onClick = { onAssignWidget(event.id) }) {
+                                            Text("Assign to widget")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF121927)), shape = RoundedCornerShape(24.dp)) {
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Event details", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    DetailRow("Countdown", presentation.breakdownLabel)
                     DetailRow("When", presentation.detailLabelDateTime)
                     if (config.description.isNotBlank()) DetailRow("Description", config.description)
                     if (config.extraFieldEnabled && config.extraFieldValue.isNotBlank()) {
@@ -358,6 +527,7 @@ private fun EventHomeScreen(
 @Composable
 private fun CountdownSettingsScreen(
     config: CountdownConfig,
+    isWidgetConfigMode: Boolean,
     photoStatus: String?,
     backgroundPhotoCount: Int,
     rotationHoursText: String,
@@ -373,7 +543,9 @@ private fun CountdownSettingsScreen(
     onPickPhotos: () -> Unit,
     onPickFiles: () -> Unit,
     onClearPhotos: () -> Unit,
-    onSave: () -> Unit
+    onSave: () -> Unit,
+    onSaveAndAssignWidget: () -> Unit,
+    onDeleteEvent: () -> Unit
 ) {
     val presentation = remember(config) { CountdownCalculator.presentation(config) }
     val dateFormatter = remember { DateTimeFormatter.ofPattern("MMM d, yyyy") }
@@ -418,10 +590,23 @@ private fun CountdownSettingsScreen(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
+            if (isWidgetConfigMode) {
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF162235)), shape = RoundedCornerShape(24.dp)) {
+                    Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Widget shortcut", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text("Save this event and immediately bind it to the widget from here.", color = Color(0xFFCAD5E2), style = MaterialTheme.typography.bodyMedium)
+                        Button(onClick = onSaveAndAssignWidget, modifier = Modifier.fillMaxWidth()) {
+                            Text("Save and use for widget")
+                        }
+                    }
+                }
+            }
+
             EventHeroCard(
                 config = config,
                 daysValue = presentation.daysValue,
                 statusLabel = presentation.statusLabel,
+                breakdownLabel = presentation.breakdownLabel,
                 targetLabel = presentation.detailLabelDateTime
             )
 
@@ -559,13 +744,16 @@ private fun CountdownSettingsScreen(
             }
 
             Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) { Text("Save event settings") }
+            if (!isWidgetConfigMode) {
+                OutlinedButton(onClick = onDeleteEvent, modifier = Modifier.fillMaxWidth()) { Text("Delete event") }
+            }
             OutlinedButton(onClick = onNavigateHome, modifier = Modifier.fillMaxWidth()) { Text("Back to event home") }
         }
     }
 }
 
 @Composable
-private fun EventHeroCard(config: CountdownConfig, daysValue: String, statusLabel: String, targetLabel: String) {
+private fun EventHeroCard(config: CountdownConfig, daysValue: String, statusLabel: String, breakdownLabel: String, targetLabel: String) {
     val context = LocalContext.current
     val photoStorage = remember(context) { PhotoStorage(context) }
     val activePhotoPath = remember(config.backgroundPhotoPaths, config.rotationHours) {
@@ -611,6 +799,7 @@ private fun EventHeroCard(config: CountdownConfig, daysValue: String, statusLabe
             Text(config.title.ifBlank { "Untitled event" }, color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
             Text(daysValue, color = Color.White, fontSize = 84.sp, fontWeight = FontWeight.Bold, lineHeight = 84.sp)
             Text(statusLabel, color = Color(0xFFCAD5E2), style = MaterialTheme.typography.titleMedium)
+            Text(breakdownLabel, color = Color(0xFFDDE7F4), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
             Text(targetLabel, color = Color(0xFF91A4BB), style = MaterialTheme.typography.bodyMedium)
             if (config.description.isNotBlank()) Text(config.description, color = Color(0xFFDDE7F4), style = MaterialTheme.typography.bodyMedium)
             if (config.extraFieldEnabled && config.extraFieldValue.isNotBlank()) {

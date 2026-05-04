@@ -12,6 +12,7 @@ import android.view.View
 import android.widget.RemoteViews
 import com.bagginzventures.countdownwidget.DESTINATION_HOME
 import com.bagginzventures.countdownwidget.EXTRA_DESTINATION
+import com.bagginzventures.countdownwidget.EXTRA_EVENT_ID
 import com.bagginzventures.countdownwidget.MainActivity
 import com.bagginzventures.countdownwidget.R
 import com.bagginzventures.countdownwidget.data.CountdownCalculator
@@ -60,6 +61,14 @@ class CountdownAppWidgetProvider : AppWidgetProvider() {
         updateWidgets(context, intArrayOf(appWidgetId), appWidgetManager)
     }
 
+    override fun onDeleted(context: Context, appWidgetIds: IntArray) {
+        super.onDeleted(context, appWidgetIds)
+        CoroutineScope(Dispatchers.IO).launch {
+            val repository = CountdownRepository(context)
+            appWidgetIds.forEach { repository.removeWidgetBinding(it) }
+        }
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         when (intent.action) {
@@ -91,22 +100,24 @@ class CountdownAppWidgetProvider : AppWidgetProvider() {
         ) {
             CoroutineScope(Dispatchers.IO).launch {
                 val repository = CountdownRepository(context)
-                val config = repository.config.first()
-                val presentation = CountdownCalculator.presentation(config)
                 val photoStorage = PhotoStorage(context)
-                val activePhotoPath = resolveActivePhotoPath(config.backgroundPhotoPaths, config.rotationHours)
-                val backgroundBitmap = activePhotoPath?.let { photoStorage.loadBitmap(it) }
-                val detailIntent = PendingIntent.getActivity(
-                    context,
-                    991,
-                    Intent(context, MainActivity::class.java).apply {
-                        putExtra(EXTRA_DESTINATION, DESTINATION_HOME)
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                    },
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                )
+                val store = repository.store.first()
 
                 appWidgetIds.forEach { widgetId ->
+                    val config = store.resolveEventForWidget(widgetId)
+                    val presentation = CountdownCalculator.presentation(config)
+                    val activePhotoPath = resolveActivePhotoPath(config.backgroundPhotoPaths, config.rotationHours)
+                    val backgroundBitmap = activePhotoPath?.let { photoStorage.loadBitmap(it) }
+                    val detailIntent = PendingIntent.getActivity(
+                        context,
+                        widgetId,
+                        Intent(context, MainActivity::class.java).apply {
+                            putExtra(EXTRA_DESTINATION, DESTINATION_HOME)
+                            putExtra(EXTRA_EVENT_ID, config.id)
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                        },
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                    )
                     val layoutMode = resolveLayoutMode(appWidgetManager.getAppWidgetOptions(widgetId))
                     val layoutRes = when (layoutMode) {
                         WidgetLayoutMode.SMALL -> R.layout.app_widget_small

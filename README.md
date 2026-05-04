@@ -1,6 +1,6 @@
 # Countdown Widget Android
 
-A polished Android home-screen countdown widget app built in Kotlin. It lets the user set a single countdown title, target date, accent theme, and rotating background photos, then shows a large days-left number directly on a real Android widget.
+A polished Android home-screen countdown widget app built in Kotlin. It now targets a multi-event model, with each widget instance able to point at a different countdown event.
 
 ## What was built
 
@@ -14,12 +14,13 @@ A polished Android home-screen countdown widget app built in Kotlin. It lets the
   - premium dark card styling
   - title, status label, target date, accent chip
   - optional photo background behind widget content
-- Simple edit screen for:
-  - countdown title
-  - target date picker
-  - accent theme selection
-  - image-only background imports from Photos and Files/Downloads/providers
-  - background rotation interval
+- Multi-event event library and editor for:
+  - adding multiple countdown events
+  - selecting which event is active in the app
+  - per-event title, target date, accent theme, metadata, and rotating background photos
+- Widget assignment flow for:
+  - binding each widget instance to a different event during widget setup
+  - opening the app directly to the event tied to the tapped widget
 - Automatic refresh behavior:
   - daily scheduled updates via `AlarmManager`
   - refresh on date/time/timezone changes
@@ -75,7 +76,7 @@ Because of that, I could **not** run:
 
 ## Notes / scope
 
-- The app stores **one shared countdown configuration** locally and all widget instances display that same countdown.
+- The app now has a **multi-event foundation** with per-widget event bindings.
 - Background images are imported through image-only pickers and then cached locally so widget rendering stays reliable.
-- Current requirement tracking for broader image import coverage lives in issue **#1**: image-only provider/download import for widget backgrounds.
-- A future v2 could add per-widget configuration, richer backgrounds, multiple countdowns, and lock-screen support.
+- Local verification is still limited by missing Android SDK configuration in this environment.
+- Likely next steps: stronger widget-configuration polish, event reordering, duplicate/clone event actions, and lock-screen support.
