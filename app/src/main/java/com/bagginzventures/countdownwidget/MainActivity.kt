@@ -36,7 +36,9 @@ import androidx.compose.material.icons.rounded.Collections
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.HelpOutline
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -182,6 +184,7 @@ private fun CountdownApp(
     var backgroundPhotoPaths by remember { mutableStateOf(currentConfig.backgroundPhotoPaths) }
     var rotationHoursText by remember { mutableStateOf(currentConfig.rotationHours.toString()) }
     var photoStatus by remember { mutableStateOf<String?>(null) }
+    var showHelpDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(requestedDestination) {
         currentScreen = requestedDestination
@@ -323,7 +326,8 @@ private fun CountdownApp(
                     photoStatus = "Event deleted"
                     currentScreen = DESTINATION_HOME
                 }
-            }
+            },
+            onOpenHelp = { showHelpDialog = true }
         )
 
         else -> EventHomeScreen(
@@ -363,6 +367,28 @@ private fun CountdownApp(
                         onWidgetConfigured(widgetId)
                     }
                 }
+            },
+            onOpenHelp = { showHelpDialog = true }
+        )
+    }
+
+    if (showHelpDialog) {
+        AlertDialog(
+            onDismissRequest = { showHelpDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showHelpDialog = false }) {
+                    Text("Got it")
+                }
+            },
+            title = { Text("Help") },
+            text = {
+                Text(
+                    "• Tap Add event to create another countdown.\n" +
+                        "• Tap Preview on an event card to switch the main view.\n" +
+                        "• Open event settings to edit the date, time, description, colors, and photos.\n" +
+                        "• During widget setup, choose an event and tap Assign to widget.\n" +
+                        "• Tapping a widget opens the linked event in the app."
+                )
             }
         )
     }
@@ -374,6 +400,7 @@ private fun EventShell(
     title: String,
     onNavigateHome: (() -> Unit)?,
     onOpenSettings: (() -> Unit)?,
+    onOpenHelp: () -> Unit,
     content: @Composable (PaddingValues) -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -381,6 +408,11 @@ private fun EventShell(
         topBar = {
             TopAppBar(
                 title = { Text(title) },
+                actions = {
+                    IconButton(onClick = onOpenHelp) {
+                        Icon(Icons.Rounded.HelpOutline, contentDescription = "Help")
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = { menuExpanded = true }) {
                         Icon(Icons.Rounded.Menu, contentDescription = "Menu")
@@ -421,13 +453,15 @@ private fun EventHomeScreen(
     onSelectEvent: (String) -> Unit,
     onCreateEvent: () -> Unit,
     onDuplicateEvent: () -> Unit,
-    onAssignWidget: (String) -> Unit
+    onAssignWidget: (String) -> Unit,
+    onOpenHelp: () -> Unit
 ) {
     val presentation = remember(config) { CountdownCalculator.presentation(config) }
     EventShell(
         title = if (widgetConfigMode) "Choose event for widget" else config.title.ifBlank { "Event" },
         onNavigateHome = null,
-        onOpenSettings = onNavigateSettings
+        onOpenSettings = onNavigateSettings,
+        onOpenHelp = onOpenHelp
     ) { padding ->
         Column(
             modifier = Modifier
@@ -545,7 +579,8 @@ private fun CountdownSettingsScreen(
     onClearPhotos: () -> Unit,
     onSave: () -> Unit,
     onSaveAndAssignWidget: () -> Unit,
-    onDeleteEvent: () -> Unit
+    onDeleteEvent: () -> Unit,
+    onOpenHelp: () -> Unit
 ) {
     val presentation = remember(config) { CountdownCalculator.presentation(config) }
     val dateFormatter = remember { DateTimeFormatter.ofPattern("MMM d, yyyy") }
@@ -579,7 +614,8 @@ private fun CountdownSettingsScreen(
     EventShell(
         title = "Event settings",
         onNavigateHome = onNavigateHome,
-        onOpenSettings = null
+        onOpenSettings = null,
+        onOpenHelp = onOpenHelp
     ) { padding ->
         Column(
             modifier = Modifier
